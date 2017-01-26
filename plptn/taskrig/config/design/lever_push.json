@@ -1,0 +1,14 @@
+{
+    "sound_file": {
+        "punish": "punish.wav",
+        "reward": "reward.wav",
+        "start": "start.wav"
+    },
+    "timing": {
+        "inter_trial": 2.0,
+        "delay": 1.0,
+        "trial": 14.0,
+        "reward": 1.0,
+        "punish": 1.0
+    }
+}
