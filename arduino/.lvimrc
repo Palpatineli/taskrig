@@ -1,0 +1,2 @@
+call SetupPlatformioEnvironment(expand('<sfile>:p'))
+let b:neomake_cpp_clang_args = ['-std=c++11']

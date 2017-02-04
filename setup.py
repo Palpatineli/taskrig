@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
     name='taskrig',
     version='0.1',
-    requires=['numpy', 'scipy', 'PyDAQmx', 'pyglet'],
+    requires=['numpy', 'PyQt5', 'pyserial', 'scipy'],
     packages=['plptn', 'plptn.taskrig'],
     entry_points={
         'gui_scripts': [

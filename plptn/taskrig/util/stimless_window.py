@@ -1,12 +1,12 @@
 from typing import List, Union
 
-import pyglet
+from PyQt5.QtWidgets import QWidget
 
 from plptn.taskrig.util.statemachine import State
 
 
-class StimlessWindow(pyglet.window.Window):
-    def __init__(self, states: List[State]):
+class StimlessWindow(QWidget):
+    def __init__(self):
         super(StimlessWindow, self).__init__()
         self._text = "start"
         self.label = pyglet.text.Label(
@@ -16,6 +16,12 @@ class StimlessWindow(pyglet.window.Window):
         self.states = {state.__name__: state for state in states}
         self.state = self.states['start']
         self.state.enter()
+        self.__init_ui__()
+
+    def __init_ui__(self):
+        self.resize(100, 150)
+        self.move(300, 300)
+        self.setWindowTitle()
 
     def _step(self, state: Union[None, str]):
         if state is not None:

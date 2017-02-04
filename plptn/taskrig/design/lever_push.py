@@ -1,7 +1,7 @@
 import pyglet
-from plptn.taskrig.device.input import LeverInput
-from plptn.taskrig.device.output import WaterReward
-from plptn.taskrig.util.sound import QuickSound
+from plptn.taskrig.device.nidaq_in import LeverInput
+from plptn.taskrig.device.nidaq_out import WaterReward
+from plptn.taskrig.device.sound import QuickSound
 
 from plptn.taskrig.config import device_config, Design
 from plptn.taskrig.util.stimless_window import StimlessWindow, State

@@ -4,9 +4,11 @@ import json
 import platform
 import time
 from collections import MutableMapping
-from os import path, makedirs, access, W_OK
+from os import path, makedirs, access, W_OK, listdir
 
-CONFIG_PATH = path.join(path.dirname(path.dirname(__file__)), 'config')
+_CONFIG_PATH = path.dirname(__file__)
+DEVICE_PATH = path.join(_CONFIG_PATH, 'device_cfg')
+DESIGN_PATH = path.join(_CONFIG_PATH, 'design')
 
 
 def deep_update(x: dict, y: dict) -> dict:
@@ -22,10 +24,15 @@ def deep_update(x: dict, y: dict) -> dict:
 
 
 def device_config():
-    device_dict = json.load(open(path.join(CONFIG_PATH, 'device', 'index.json'), 'r'))
+    device_dict = json.load(open(path.join(DEVICE_PATH, 'index.json'), 'r'))
     device_name = device_dict[platform.node()]
-    config = json.load(open(path.join(CONFIG_PATH, 'device', device_name + '.json'), 'r'))
+    config = json.load(open(path.join(DEVICE_PATH, device_name + '.json'), 'r'))
     return config
+
+
+def design_list():
+    return [path.splitext(file_name)[0] for file_name in listdir(DESIGN_PATH)
+            if file_name.endswith(".json")]
 
 
 class Logger(object):
@@ -66,12 +73,12 @@ class Design(MutableMapping):
 
     def __init__(self, design_type):
         self.design_type = design_type
-        with open(path.join(CONFIG_PATH, 'design', design_type + '.json'), 'r') as config_file:
+        with open(path.join(DESIGN_PATH, design_type + '.json'), 'r') as config_file:
             temp_dict = json.load(config_file)
         set_hierarchy = list()
         set_hierarchy.append(temp_dict)
         while 'base' in temp_dict:
-            with open(path.join(CONFIG_PATH, 'design', temp_dict['base'] + '.json'),
+            with open(path.join(DESIGN_PATH, temp_dict['base'] + '.json'),
                       'r') as config_file:
                 temp_dict = json.load(config_file)
             set_hierarchy.append(temp_dict)
@@ -85,7 +92,7 @@ class Design(MutableMapping):
     def __del__(self):
         if self.is_modified:
             json.dump(self.write_dict,
-                      open(path.join(CONFIG_PATH, 'design', self.design_type + '.json'), 'w'),
+                      open(path.join(DESIGN_PATH, self.design_type + '.json'), 'w'),
                       sort_keys=True, indent=4, separators=(',', ': '))
 
     def __contains__(self, item):
