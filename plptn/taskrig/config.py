@@ -1,7 +1,6 @@
 """Provide Path information and experiment design parameters
 by Keji Li 10/26/2015 mail@keji.li in Sur lab, MIT PILM"""
 import json
-import platform
 import time
 from collections import MutableMapping
 from os import path, makedirs, access, W_OK, listdir
@@ -23,11 +22,9 @@ def deep_update(x: dict, y: dict) -> dict:
     return x
 
 
-def device_config():
-    device_dict = json.load(open(path.join(DEVICE_PATH, 'index.json'), 'r'))
-    device_name = device_dict[platform.node()]
-    config = json.load(open(path.join(DEVICE_PATH, device_name + '.json'), 'r'))
-    return config
+def device_list():
+    return [path.splitext(file_name)[0] for file_name in listdir(DEVICE_PATH)
+            if file_name.endswith(".json")]
 
 
 def design_list():
@@ -65,20 +62,20 @@ class Logger(object):
         json.dump(data, open(self.path, 'w'), indent=4, separators=(',', ': '))
 
 
-class Design(MutableMapping):
-    """only direct writing of item is persistent. writing elements of items is not.
-    """
+class HierarchicalConfig(MutableMapping):
+    """only direct writing of item is persistent. writing elements of items is not."""
     is_modified = False
     default_str = "default"
+    root_folder = None
 
     def __init__(self, design_type):
         self.design_type = design_type
-        with open(path.join(DESIGN_PATH, design_type + '.json'), 'r') as config_file:
+        with open(path.join(self.root_folder, design_type + '.json'), 'r') as config_file:
             temp_dict = json.load(config_file)
         set_hierarchy = list()
         set_hierarchy.append(temp_dict)
         while 'base' in temp_dict:
-            with open(path.join(DESIGN_PATH, temp_dict['base'] + '.json'),
+            with open(path.join(self.root_folder, temp_dict['base'] + '.json'),
                       'r') as config_file:
                 temp_dict = json.load(config_file)
             set_hierarchy.append(temp_dict)
@@ -92,7 +89,7 @@ class Design(MutableMapping):
     def __del__(self):
         if self.is_modified:
             json.dump(self.write_dict,
-                      open(path.join(DESIGN_PATH, self.design_type + '.json'), 'w'),
+                      open(path.join(self.root_folder, self.design_type + '.json'), 'w'),
                       sort_keys=True, indent=4, separators=(',', ': '))
 
     def __contains__(self, item):
@@ -121,3 +118,17 @@ class Design(MutableMapping):
 
     def to_dict(self):
         return {key: value for key, value in self.items() if key not in ('base', 'user_changeable')}
+
+
+class Design(HierarchicalConfig):
+    root_folder = DESIGN_PATH
+
+    def __delitem__(self, key):
+        raise NotImplementedError
+
+
+class DeviceConfig(HierarchicalConfig):
+    root_folder = DEVICE_PATH
+
+    def __delitem__(self, key):
+        raise NotImplementedError

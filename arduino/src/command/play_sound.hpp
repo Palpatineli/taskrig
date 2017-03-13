@@ -9,7 +9,7 @@ class Clock;
 class PlaySound: virtual public Command {
 public:
     explicit PlaySound(SoundDevice *sound_dev);
-    virtual uint8_t run(uint8_t audio_id, Clock *clk);
+    uint8_t run(uint8_t audio_id, Clock *clk);
 private:
     SoundDevice *sound_device;
 };

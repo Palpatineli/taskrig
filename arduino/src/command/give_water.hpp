@@ -5,9 +5,13 @@
 
 class Clock;
 
-class GiveWater: virtual public Command {
-    virtual uint8_t run(uint8_t duration, Clock *clk);
+class GiveWater: public Command {
+public:
+    GiveWater();
+    uint8_t run(uint8_t duration, Clock *clk);
 };
-class StopWater: virtual public Command {
-    virtual uint8_t run(uint8_t duration, Clock *clk);
+
+
+class StopWater: public Command {
+    uint8_t run(uint8_t duration, Clock *clk);
 };

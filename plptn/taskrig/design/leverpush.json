@@ -5,9 +5,11 @@
         "start": "start.wav"
     },
     "timing": {
-        "inter_trial": 1000,
-        "trial": 2000,
-        "reward": 1000
+        "inter_trial": 2000,
+        "delay": 1000,
+        "trial": 4000,
+        "reward": 1000,
+        "punish": 1000
     },
     "reward": 6
 }

@@ -1,74 +1,69 @@
 """serial communication with arduino"""
+from typing import Iterable, Tuple
 from itertools import chain
-from struct import unpack, iter_unpack, pack
+import numpy as np
 from serial import Serial
 from serial.tools.list_ports import comports
-from scipy.signal import gaussian, convolve
-from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QTimer
+from serial.tools.list_ports_common import ListPortInfo
+from PyQt5.QtCore import pyqtSignal, pyqtSlot, QTimer, QObject
 from plptn.taskrig.util.logger import Logger
-from plptn.taskrig.config import device_config
+from plptn.taskrig.util.timeseries import despike
+from plptn.taskrig.config import DeviceConfig
+from plptn.taskrig.device.protocol import *
 
 
-DEVICE_TYPE = "Arduino MKRZero"
-# outgoing
-GIVE_WATER = 0x00
-STOP_WATER = 0x01
-PLAY_SOUND = 0x02
-SOUND_ID = {'start': 0, 'reward': 1, 'punish': 2}
+# process result
+LEVER_FLUX = 1
+LEVER_RISE = 2
+LICKED = 3
 
-# incoming
-SERIAL_SEGMENT = 500
-PACKET_SIZE = 10
-PACKET_FMT = ">xBIi"
-PACKET_FMT_S = ">BIi"
-SEPARATOR = 0xff
-WATER_STAMP = 0x00
-SOUND_STAMP = 0x02
-TOUCH_CHAN_0 = 0x03
-TOUCH_CHAN_1 = 0x04
-LEVER = 0x05
+DEVICE_NAME = 'Arduino MKRZero'
 
 
 def list_ports():
-    ports = comports()
-    filtered_ports = [port for port in ports if port.description == DEVICE_TYPE]
+    filtered_ports = list()
+    for port in comports():
+        if port.pid == 32847 and port.vid == 9025:
+            filtered_ports.append(port)
     if not filtered_ports:
-        raise IOError("please plug in your {0} device!\n".format(DEVICE_TYPE))
+        raise IOError("please plug in your {0} device!\n".format("Arduino MKRZero"))
     return filtered_ports
 
 
+def _read_packets(port: Serial) -> Iterable[Tuple]:
+    while port.read(1) != SEPARATOR:
+        continue
+    remaining = port.in_waiting - PACKET_FMT_S.size
+    to_read = remaining - remaining % PACKET_FMT.size
+    return chain([PACKET_FMT_S.unpack(port.read(PACKET_FMT_S.size))],
+                 PACKET_FMT.iter_unpack(port.read(to_read)))
+
+
 class Arduino(QObject):
-    _instance = None
-    buffer_size = 50000
-    baudrate = 115200
     lever_pushed = pyqtSignal(name="lever_pushed")
     lever_fluxed = pyqtSignal(name="lever_fluxed")
-    licked = pyqtSignal(int, name="licked")
+    send_message = pyqtSignal(str, name="send_message")
+    licked = pyqtSignal(name="licked")
     finished = pyqtSignal(name="finished")
-    running = False
     timer = None
 
-    def __init__(self, port_name, logger: Logger):
-        device_cfg = device_config()
+    def __init__(self, device_id: str, port: ListPortInfo, logger: Logger):
         super(Arduino, self).__init__()
-        self.port_name = port_name
-        self.port = Serial(port=port_name, baudrate=self.baudrate)
-        self.lever_processor = Lever(device_cfg['lever'], self.lever_pushed, self.lever_fluxed)
-        self.lick_processor = Lick(device_cfg['lick'], self.licked)
-        water_a, water_b = device_cfg['device_reward']['time_coef']
-        self.water_convert = lambda x: water_a * x + water_b
         self.logger = logger
-
-    @classmethod
-    def get_instance(cls, *args, **kwargs):
-        if not cls._instance:
-            cls._instance = cls(*args, **kwargs)
-        return cls._instance
+        device_cfg = DeviceConfig(device_id)
+        logger.config['device'] = device_cfg.to_dict()
+        self.port_address = port.location
+        self.port = Serial(port=port.device, baudrate=BAUDRATE)
+        self.lever_processor = LeverProcessor(device_cfg['lever'])
+        self.lick_processor = LickProcessor(device_cfg['lick'])
+        self._water_convert = RewardControl(*device_cfg['reward']['time_coef'])
+        self.waiting_for_ttl = False
 
     @pyqtSlot()
-    def on_start_exp(self):
+    def on_start(self):
         self.timer = QTimer()
         self.timer.timeout.connect(self.work_once)
+        self.port.reset_input_buffer()
         self.timer.start(25)
 
     @pyqtSlot()
@@ -76,70 +71,109 @@ class Arduino(QObject):
         port = self.port
         logger = self.logger
         if port.in_waiting > SERIAL_SEGMENT:
-            signal_type, timestamp, signal = zip(*self._read_packets(port))
-            lever_mask = signal_type == LEVER
-            lick_mask = signal_type == TOUCH_CHAN_0
-            sound_mask = signal_type == SOUND_STAMP
-            lever_signal = signal[lever_mask]
-            lever_stamp = timestamp[lever_mask]
-            self.lever_processor.process(lever_signal, lever_stamp)
-            logger.lever_signal.append(lever_signal)
-            logger.lever_stamp.append(lever_stamp)
-            self.lick_processor.process(signal[lick_mask])
-            logger.water_stamp.append(timestamp[signal_type == WATER_STAMP])
-            logger.sound_played.append(signal[sound_mask])
-            logger.sound_stamp.append(timestamp[sound_mask])
+            signal_types, timestamps, signals = map(np.array, zip(*_read_packets(port)))
+            # lever
+            lever_mask = signal_types == SignalType.LEVER
+            if np.count_nonzero(lever_mask) > 0:
+                lever_signal = signals[lever_mask]
+                lever_stamp = timestamps[lever_mask]
+                logger.lever_stamp.append(lever_stamp)
+                logger.lever_signal.append(lever_signal)
+                result, lever_event_stamp = self.lever_processor(lever_signal, lever_stamp)
+                if result == LEVER_FLUX:
+                    self.lever_fluxed.emit()
+                elif result == LEVER_RISE:
+                    self.lever_pushed.emit()
+            lick_mask = signal_types == SignalType.LICK_TOUCH
+            if np.count_nonzero(lick_mask) > 0:
+                result = self.lick_processor(signals[lick_mask])
+                if result == LICKED:
+                    self.licked.emit()
+            if self.waiting_for_ttl and SignalType.SEND_TTL in signal_types:
+                logger.other.append(("SEND_TTL", timestamps[np.argmax(
+                    np.equal(signal_types, int(SignalType.SEND_TTL)))]))
+            sound_mask = signal_types == SignalType.PLAY_SOUND
+            if np.count_nonzero(sound_mask) > 0:
+                logger.sound_played.append(signals[sound_mask])
+                logger.sound_stamp.append(timestamps[sound_mask])
+            for signal_type in OTHER_SIGNALS:
+                mask = signal_types == signal_type
+                if np.count_nonzero(mask) > 0:
+                    logger.other.append((SIGNAL_NAME[signal_type], int(timestamps[mask][0])))
 
     @pyqtSlot()
-    def on_stop_exp(self):
-        if self.timer:
+    def on_stop(self):
+        if self.timer is not None:
             self.timer.stop()
         self.finished.emit()
 
-    @staticmethod
-    def _read_packets(port: Serial):
-        while port.read(1) != SEPARATOR:
-            continue
-        return chain([unpack(PACKET_FMT_S, port.read(2))],
-                     iter_unpack(PACKET_FMT, port.read(port.in_waiting // 3 - 1)))
+    @pyqtSlot(float)
+    def on_give_water(self, amount: float):
+        self.port.write(SEPARATOR + SEND_PACKET_FMT.pack(SignalType.WATER_START,
+                                                         self._water_convert(amount)))
+
+    @pyqtSlot()
+    def on_start_water(self):
+        sent_bytes = SEPARATOR + SEND_PACKET_FMT.pack(SignalType.WATER_START, 0)
+        self.port.write(sent_bytes)
+
+    @pyqtSlot()
+    def on_reset(self):
+        self.port.reset_input_buffer()
+
+    @pyqtSlot()
+    def on_stop_water(self):
+        self.port.write(SEPARATOR + SEND_PACKET_FMT.pack(SignalType.WATER_END, 0))
 
     @pyqtSlot(int)
-    def give_water(self, amount: float):
-        self.port.write(pack('>BBB', SEPARATOR, GIVE_WATER, self.water_convert(amount)))
+    def on_play_sound(self, sound_id: str):
+        self.port.write(SEPARATOR + SEND_PACKET_FMT.pack(SignalType.PLAY_SOUND, SOUND_ID[sound_id]))
 
-    @pyqtSlot(int)
-    def play_sound(self, sound_id: str):
-        self.port.write(pack('>BBB', SEPARATOR, PLAY_SOUND, SOUND_ID[sound_id]))
+    @pyqtSlot()
+    def on_give_ttl(self):
+        self.port.write(SEPARATOR + SEND_PACKET_FMT.pack(SignalType.SEND_TTL, 0))
+        self.waiting_for_ttl = True
 
 
-class Lever(object):
+class RewardControl(object):
+    """convert ml to ms with the reward delivery system in current rig"""
+    def __init__(self, linear_coef: float, startup_time: float):
+        self.linear_coef = linear_coef
+        self.startup_time = startup_time
+
+    def __call__(self, volume):
+        return int(self.linear_coef * volume + self.startup_time)
+
+
+class LeverProcessor(object):
     previous = 0
     baseline = 0
 
-    def __init__(self, lever_config, rise_signal, flux_signal):
-        super(Lever, self).__init__()
+    def __init__(self, lever_config):
+        super(LeverProcessor, self).__init__()
         self.min_rise = lever_config['min_rise']
         self.max_flux = lever_config['max_flux']
         self.max_std = lever_config['max_std']
-        self.rise_signal = rise_signal
-        self.flux_signal = flux_signal
-        self.filter = gaussian(10, 0.3)
 
-    def process(self, trace, timestamps):
-        filtered = convolve(trace, self.filter)
-        max_idx = filtered.argmax()
-        if filtered[max_idx] - self.previous > self.min_rise:
-            self.rise_signal.emit(timestamps[max_idx])
-        elif trace.mean() - self.previous > self.max_flux and trace.std() > self.max_std:
-            self.flux_signal.emit()
+    def __call__(self, trace, timestamps):
+        trace = despike(trace)
+        max_idx = trace.argmax()
+        if trace[max_idx] - self.previous > self.min_rise:
+            return_value = LEVER_RISE
+        elif abs(trace.mean() - self.previous) > self.max_flux or trace.std() > self.max_std:
+            return_value = LEVER_FLUX
+        else:
+            return_value = 0
         self.previous = trace.mean()
+        return return_value, timestamps[max_idx]
 
 
-class Lick(object):
-    def __init__(self, lick_config, lick_signal):
+class LickProcessor(object):
+    def __init__(self, lick_config):
         self.lick_threshold = lick_config['threshold']
-        self.lick_signal = lick_signal
 
-    def process(self, trace):
-        if trace.max() > self.lick_threshold:
-            self.lick_signal.emit()
+    def __call__(self, trace):
+        if np.diff(trace).max() > self.lick_threshold:
+            return LICKED
+        else:
+            return 0

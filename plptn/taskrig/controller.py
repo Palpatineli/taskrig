@@ -1,8 +1,10 @@
-from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QThread, QState, QTimer
+from typing import Dict
+from functools import partial
+from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QState, QTimer, QStateMachine
 
-from plptn.taskrig.mainwindowdata import MainWindowData
 from plptn.taskrig.device.arduino import Arduino
 from plptn.taskrig.util.logger import Logger
+from plptn.taskrig.config import Design
 
 
 class MyState(QState):
@@ -18,40 +20,54 @@ class MyState(QState):
 
 
 class Controller(QObject):
-    finished = pyqtSignal(name="finished")
-    stop_exp = pyqtSignal(name="stop_exp")
-    update_result = pyqtSignal(dict, name="state_changed")
-    update_state = pyqtSignal(str, name="state_changed")
-    logger = Logger()
-    config = dict()
+    # signals for device
+    stop = pyqtSignal(name='stop')
+    start = pyqtSignal(name='start')
+    # signals for GUI
+    update_result = pyqtSignal(dict, name='update_result')
+    update_state = pyqtSignal(str, name='update_state')
+    finished = pyqtSignal(name='finished')
 
-    def __init__(self, ui_config: MainWindowData):
+    result = {'hit': 0, 'miss': 0, 'early': 0, 'water_given': 0}
+
+    def __init__(self, setting: dict, device: Arduino, logger: Logger):
         super(Controller, self).__init__()
-        self.config = ui_config
-        self.device = Arduino.get_instance(ui_config.port, self.logger)
-        """:type: Arduino"""
-        thread = QThread()
-        self.device.moveToThread(thread)
-        thread.started.connect(self.device.on_start_exp)
-        self.device.finished.connect(thread.quit)
-        self.device.finished.connect(self.on_finished)
-        thread.finished.connect(self.on_finished)
-        self.stop_exp.connect(self.device.on_stop_exp)
-        thread.start()
+        self.setting = setting
+        self.machine = QStateMachine()
+        self.device = device
+        self.logger = logger
+        self.total_trial = 0
+        self.total_reward = 0
 
-    @pyqtSlot(dict)
-    def on_start_exp(self):
-        raise NotImplementedError
+    def _initialize_design(self, exp_type: str) -> None:
+        """sets self.design, self.states"""
+        self.design = Design(exp_type)
+        self.logger.config['design'] = self.design.to_dict()
+        timing = self.design['timing']
+        self.states = dict()
+        for key, value in timing.items():
+            self.states[key] = MyState(value)
+            self.states[key].entered.connect(partial(self.on_update_state, key))
 
-    @pyqtSlot(str)
-    def on_stop_exp(self):
-        self.stop_exp.emit()
-        self.logger.save(self.config.data['file_path'])
+    @staticmethod
+    def _initialize_machine(machine: QStateMachine, states: Dict[str, MyState]):
+        for value in states.values():
+            machine.addState(value)
+        machine.setInitialState(states['inter_trial'])
 
     @pyqtSlot()
-    def on_finished(self):
+    def on_start(self):
+        self.logger.clear()
+        self.machine.start()
+        self.start.emit()
+
+    @pyqtSlot()
+    def on_stop(self):
+        self.stop.emit()
+        self.machine.stop()
+        self.logger.save(self.setting['file_path'])
         self.finished.emit()
 
-    @pyqtSlot(float)
-    def on_give_water(self, water_dose: float):
-        Arduino.get_instance(self.config.port.device, self.logger).give_water(water_dose)
+    @pyqtSlot(str)
+    def on_update_state(self, msg: str):
+        self.update_state.emit(msg)

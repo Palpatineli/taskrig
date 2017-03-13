@@ -5,27 +5,28 @@ import numpy as np
 
 
 class Logger(object):
-    lever_signal = list()
-    lever_stamp = list()
-    water_stamp = list()
-    sound_played = list()
-    sound_stamp = list()
+    log_types = ("lever_signal", "lever_stamp", "sound_played", "sound_stamp")
     config = dict()
+    other = list()
+
+    def __init__(self):
+        for log_type in self.log_types:
+            self.__dict__[log_type] = list()
 
     def save(self, file_path: str):
         try:
             file = open(file_path, 'w')
         except OSError:
             file = open(expanduser("~/exp-log-{0}.json".format(datetime.now().isoformat())), 'w')
-        data = {'lever': np.vstack([np.hstack(self.lever_stamp), np.hstack(self.lever_signal)]),
-                'water': np.hstack(self.water_stamp),
-                'sound': np.vstack([np.hstack(self.sound_stamp), np.hstack(self.sound_played)]),
-                'config': self.config}
+        data = dict()
+        for log_type in self.log_types:
+            if len(self.__dict__[log_type]) > 0:
+                data[log_type] = np.hstack(self.__dict__[log_type]).tolist()
+        data['config'] = self.config
+        data['stamps'] = self.other
         json.dump(data, file)
 
     def clear(self):
-        self.lever_signal = list()
-        self.lever_stamp = list()
-        self.water_stamp = list()
-        self.sound_played = list()
-        self.sound_stamp = list()
+        for log_type in self.log_types:
+            self.__dict__[log_type] = list()
+            self.other = list()

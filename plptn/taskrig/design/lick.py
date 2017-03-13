@@ -1,43 +1,43 @@
 from functools import partial
-from PyQt5.QtCore import QStateMachine, pyqtSlot
+from PyQt5.QtCore import pyqtSlot
 
-from plptn.taskrig.controller import Controller, MyState
-from plptn.taskrig.config import Design
+from plptn.taskrig.controller import Controller
+from plptn.taskrig.device.arduino import Arduino
+from plptn.taskrig.util.logger import Logger
 
 
 class LickController(Controller):
-    def __init__(self, ui_config):
-        super(LickController, self).__init__(ui_config)
-        machine = QStateMachine()
-        self.design = Design(ui_config.data['design_type'])
-        timing = self.design['timing']
-        water_amount = ui_config.data['reward_amount']
+    __controller_type = "lick"
 
-        inter_trial = MyState(timing['inter_trial'])
-        trial = MyState(timing['trial'])
-        reward = MyState(timing['reward'])
+    def __init__(self, settings: dict, device: Arduino, logger: Logger):
+        super(LickController, self).__init__(settings, device, logger)
+        self._initialize_design(self.__controller_type)
+        states = self.states
+        water_amount = float(self.design['reward'])
 
-        trial.entered.connect(partial(self.device.play_sound, 'start'))
-        reward.entered.connect(partial(self.device.play_sound, 'reward'))
-        reward.entered.connect(partial(self.device.give_water, water_amount))
+        states['inter_trial'].entered.connect(device.on_reset)
+        states['trial'].entered.connect(partial(device.on_play_sound, 'start'))
+        states['trial'].entered.connect(self.on_new_trial)
+        states['reward'].entered.connect(partial(device.on_play_sound, 'reward'))
+        states['reward'].entered.connect(self.on_new_reward)
+        states['reward'].entered.connect(partial(device.on_give_water, water_amount))
 
-        inter_trial.addTimedTransition(trial)
-        trial.addTimedTransition(inter_trial)
-        reward.addTimedTransition(inter_trial)
-        inter_trial.addTransition(self.device.licked, inter_trial)
-        trial.addTransition(self.device.licked, reward)
+        states['inter_trial'].addTimedTransition(states['trial'])
+        states['trial'].addTimedTransition(states['inter_trial'])
+        states['reward'].addTimedTransition(states['inter_trial'])
+        states['inter_trial'].addTransition(device.licked, states['inter_trial'])
+        states['trial'].addTransition(device.licked, states['reward'])
 
-        machine.addState(inter_trial)
-        machine.addState(trial)
-        machine.addState(reward)
-        machine.setInitialState(inter_trial)
-        self.machine = machine
+        self._initialize_machine(self.machine, states)
 
     @pyqtSlot()
-    def on_start_exp(self):
-        self.machine.start()
+    def on_new_trial(self):
+        self.result['miss'] += 1
+        self.update_result.emit(self.result)
 
     @pyqtSlot()
-    def on_stop_exp(self):
-        self.machine.stop()
-        super(LickController, self).on_stop_exp()
+    def on_new_reward(self):
+        self.result['miss'] -= 1
+        self.result['hit'] += 1
+        self.result['water_given'] += self.design['reward']
+        self.update_result.emit(self.result)
