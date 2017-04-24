@@ -59,7 +59,7 @@ class Logger(object):
             data['config'] = self.config
         if self.sequence is not None:
             data['sequence'] = self.sequence
-        json.dump(data, open(self.path, 'w'), indent=4, separators=(',', ': '))
+        json.dump(data, open(self.path, 'w', newline='\r\n'), indent=4, separators=(',', ': '))
 
 
 class HierarchicalConfig(MutableMapping):
@@ -88,9 +88,9 @@ class HierarchicalConfig(MutableMapping):
 
     def __del__(self):
         if self.is_modified:
-            json.dump(self.write_dict,
-                      open(path.join(self.root_folder, self.design_type + '.json'), 'w'),
-                      sort_keys=True, indent=4, separators=(',', ': '))
+            file_name = path.join(self.root_folder, self.design_type + '.json')
+            with open(file_name, 'w', newline='\r\n') as out:
+                json.dump(out, self.write_dict, sort_keys=True, indent=4, separators=(',', ': '))
 
     def __contains__(self, item):
         return self.read_dict.__contains__(item)

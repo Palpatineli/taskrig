@@ -25,7 +25,6 @@ for x in OTHER_SIGNALS:
 # signaling parameters
 BAUDRATE = 115200
 SEPARATOR = b'\xff'
-SOUND_ID = {'start': 0, 'reward': 1, 'punish': 2}
 SERIAL_SEGMENT = 500
 PACKET_FMT = Struct(">xBIi")
 PACKET_FMT_S = Struct(">BIi")

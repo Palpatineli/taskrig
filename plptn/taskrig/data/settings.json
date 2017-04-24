@@ -1,1 +1,6 @@
-{"device_id": "rig001", "design_type": "lick", "reward_amount": 5.0, "file_path": "~/Downloads/lever.json"}
+{
+    "design_type": "lick",
+    "file_path": "C:/Users/surlab/Downloads/lick4.json",
+    "device_id": "rig001",
+    "reward_amount": 5.0
+}

@@ -1,7 +1,7 @@
 from PyQt5.QtCore import QObject
 
-from config import design_list, device_list
-from device.arduino import list_ports
+from plptn.taskrig.config import design_list, device_list
+from plptn.taskrig.device.arduino import list_ports
 
 
 class Settings(QObject):

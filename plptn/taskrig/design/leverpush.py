@@ -1,10 +1,10 @@
 from functools import partial
+
 from PyQt5.QtCore import pyqtSlot
 
-from plptn.taskrig.controller import Controller, MyState
+from plptn.taskrig.controller import Controller
 from plptn.taskrig.device.arduino import Arduino
 from plptn.taskrig.util.logger import Logger
-from plptn.taskrig.config import Design
 
 
 class LeverpushController(Controller):

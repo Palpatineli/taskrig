@@ -1,16 +1,18 @@
 """serial communication with arduino"""
-from typing import Iterable, Tuple
 from itertools import chain
+from typing import Iterable, Tuple
+
 import numpy as np
+from PyQt5.QtCore import pyqtSignal, pyqtSlot, QTimer, QObject
 from serial import Serial
 from serial.tools.list_ports import comports
 from serial.tools.list_ports_common import ListPortInfo
-from PyQt5.QtCore import pyqtSignal, pyqtSlot, QTimer, QObject
-from plptn.taskrig.util.logger import Logger
-from plptn.taskrig.util.timeseries import despike
+
 from plptn.taskrig.config import DeviceConfig
 from plptn.taskrig.device.protocol import *
-
+from plptn.taskrig.device.sys_audio import SysAudio
+from plptn.taskrig.util.logger import Logger
+from plptn.taskrig.util.timeseries import despike
 
 # process result
 LEVER_FLUX = 1
@@ -46,6 +48,7 @@ class Arduino(QObject):
     licked = pyqtSignal(name="licked")
     finished = pyqtSignal(name="finished")
     timer = None
+    audio_device = None  # type: SysAudio
 
     def __init__(self, device_id: str, port: ListPortInfo, logger: Logger):
         super(Arduino, self).__init__()
@@ -61,6 +64,7 @@ class Arduino(QObject):
 
     @pyqtSlot()
     def on_start(self):
+        self.audio_device = SysAudio()  # has a timer in it, needs to be created in thread
         self.timer = QTimer()
         self.timer.timeout.connect(self.work_once)
         self.port.reset_input_buffer()
@@ -127,7 +131,10 @@ class Arduino(QObject):
 
     @pyqtSlot(int)
     def on_play_sound(self, sound_id: str):
-        self.port.write(SEPARATOR + SEND_PACKET_FMT.pack(SignalType.PLAY_SOUND, SOUND_ID[sound_id]))
+        logger = self.logger
+        logger.sound_played.append(sound_id)
+        logger.sound_stamp.append(logger.lever_stamp[-1][-1])
+        self.audio_device.play(sound_id)
 
     @pyqtSlot()
     def on_give_ttl(self):

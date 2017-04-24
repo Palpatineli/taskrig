@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import QDialog
 
-from settings import Settings
 from plptn.taskrig.data.ui_dialog import Ui_Dialog
+from plptn.taskrig.settings import Settings
 
 
 class Dialog(QDialog, Ui_Dialog):

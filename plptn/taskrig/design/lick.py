@@ -1,4 +1,5 @@
 from functools import partial
+
 from PyQt5.QtCore import pyqtSlot
 
 from plptn.taskrig.controller import Controller
@@ -15,18 +16,14 @@ class LickController(Controller):
         states = self.states
         water_amount = float(self.design['reward'])
 
-        states['inter_trial'].entered.connect(device.on_reset)
-        states['trial'].entered.connect(partial(device.on_play_sound, 'start'))
-        states['trial'].entered.connect(self.on_new_trial)
+        states['inter_trial'].entered.connect(self.on_new_trial)
         states['reward'].entered.connect(partial(device.on_play_sound, 'reward'))
         states['reward'].entered.connect(self.on_new_reward)
         states['reward'].entered.connect(partial(device.on_give_water, water_amount))
 
-        states['inter_trial'].addTimedTransition(states['trial'])
-        states['trial'].addTimedTransition(states['inter_trial'])
+        states['inter_trial'].addTimedTransition(states['inter_trial'])
         states['reward'].addTimedTransition(states['inter_trial'])
-        states['inter_trial'].addTransition(device.licked, states['inter_trial'])
-        states['trial'].addTransition(device.licked, states['reward'])
+        states['inter_trial'].addTransition(device.licked, states['reward'])
 
         self._initialize_machine(self.machine, states)
 
