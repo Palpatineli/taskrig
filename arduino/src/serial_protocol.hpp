@@ -10,7 +10,6 @@ const uint8_t SEPARATOR = 0xff;
 enum SignalType: uint8_t {
     GIVE_WATER      = 0x00,
     STOP_WATER      = 0x01,
-    PLAY_SOUND      = 0x02,
     SEND_TTL        = 0x03,
     LICK_TOUCH      = 0x10,
     SUPPORT_TOUCH   = 0x11,

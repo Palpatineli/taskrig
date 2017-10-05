@@ -2,19 +2,16 @@
 #include "src/chip/fdc1004.hpp"
 #include "src/chip/ads1262.hpp"
 #include "src/pinDef.hpp"
-#include "src/sound_device.hpp"
 #include "src/clock.hpp"
 #include "src/command.hpp"
 #include "src/serial_protocol.hpp"
 #include "src/command/give_water.hpp"
-#include "src/command/play_sound.hpp"
 #include "src/command/send_trigger.hpp"
 
 FDC1004 *touch;
 ADS1262 *lever;
 Clock *clk_1;
 volatile bool recording(false);
-uint8_t AUDIO_START, AUDIO_REWARD, AUDIO_PUNISH;
 uint32_t baudrate(115200);
 static const uint8_t COMMAND_SIZE = 8, SIGNAL_QUEUE_SIZE = 255;
 Command *commands[COMMAND_SIZE];
@@ -41,12 +38,12 @@ void setup() {
     commands[SignalType::GIVE_WATER] = new GiveWater();
     commands[SignalType::STOP_WATER] = new StopWater();
     commands[SignalType::SEND_TTL] = new SendTrigger();
-    SoundDevice *sound_dev = new SoundDevice();
-    AUDIO_START = sound_dev->register_file("start.wav");
-    AUDIO_REWARD = sound_dev->register_file("reward.wav");
-    AUDIO_PUNISH = sound_dev->register_file("punish.wav");
-    commands[SignalType::PLAY_SOUND] = new PlaySound(sound_dev);
-    lever->write_config();
+    delay(250);
+    uint8_t raw_config[6];
+    lever->write_config(raw_config);
+    for (int idx = 0; idx < 6; idx++) {
+        send_signal(SignalType::LEVER, (uint32_t)raw_config[idx]);
+    }
 }
 
 void loop() {
@@ -65,9 +62,10 @@ void loop() {
         send_signal(SignalType::LICK_TOUCH, (int32_t)touch->read_measurement(0));
         send_signal(SignalType::SUPPORT_TOUCH, (int32_t)touch->read_measurement(1));
     }
+    voltage_read = 127;
     uint8_t lever_status = lever->read(&voltage_read);
     if (lever_status == 0) {
-      send_signal(SignalType::LEVER, voltage_read);
+        send_signal(SignalType::LEVER, voltage_read);
     }
 }
 

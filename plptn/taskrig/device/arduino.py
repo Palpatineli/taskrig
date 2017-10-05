@@ -89,7 +89,7 @@ class Arduino(QObject):
                 elif result == LEVER_RISE:
                     self.lever_pushed.emit()
             lick_mask = signal_types == SignalType.LICK_TOUCH
-            if np.count_nonzero(lick_mask) > 0:
+            if np.count_nonzero(lick_mask) > 1:
                 result = self.lick_processor(signals[lick_mask])
                 if result == LICKED:
                     self.licked.emit()
