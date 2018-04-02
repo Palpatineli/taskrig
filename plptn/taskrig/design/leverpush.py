@@ -40,18 +40,18 @@ class LeverpushController(Controller):
 
         self._initialize_machine(self.machine, states)
 
-    @pyqtSlot()
+    @pyqtSlot(name='on_new_delay')
     def on_new_delay(self):
         self.result['early'] += 1
         self.update_result.emit(self.result)
 
-    @pyqtSlot()
+    @pyqtSlot(name='on_new_trial')
     def on_new_trial(self):
         self.result['early'] -= 1
         self.result['miss'] += 1
         self.update_result.emit(self.result)
 
-    @pyqtSlot()
+    @pyqtSlot(name='on_new_reward')
     def on_new_reward(self):
         self.result['miss'] -= 1
         self.result['hit'] += 1

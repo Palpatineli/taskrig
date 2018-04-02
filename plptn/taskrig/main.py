@@ -14,7 +14,7 @@ def main():
     dialog = Dialog(dialog_data)
     if dialog.exec() == QDialog.Accepted:
         window = MainWindow()
-        controller = WindowController(window, dialog_data)
+        WindowController(window, dialog_data)
         window.show()
         sys.exit(app.exec_())
 

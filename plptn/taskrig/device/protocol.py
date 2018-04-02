@@ -1,5 +1,8 @@
+"""Define the usb serial protocol with arduino for the lever-push chip"""
 import enum
 from struct import Struct
+__all__ = ['SignalType', 'OTHER_SIGNALS', 'SIGNAL_NAME', 'BAUDRATE', 'SEPARATOR', 'SERIAL_SEGMENT', 'PACKET_FMT',
+           'PACKET_FMT_S', 'SEND_PACKET_FMT']
 
 
 @enum.unique
@@ -14,9 +17,8 @@ class SignalType(enum.IntEnum):
     LEVER = 0x12
 
 
-# noinspection PyTypeChecker
-OTHER_SIGNALS = set(SignalType) - {SignalType.LEVER, SignalType.LICK_TOUCH, SignalType.SEND_TTL,
-                                   SignalType.SEND_TTL, SignalType.SUPPORT_TOUCH, SignalType.PLAY_SOUND}
+OTHER_SIGNALS: set = set(SignalType) - {SignalType.LEVER, SignalType.LICK_TOUCH, SignalType.SEND_TTL,
+                                        SignalType.SEND_TTL, SignalType.SUPPORT_TOUCH, SignalType.PLAY_SOUND}
 
 SIGNAL_NAME = dict()
 for x in OTHER_SIGNALS:

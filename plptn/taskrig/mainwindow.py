@@ -20,14 +20,14 @@ class MainWindow(QMainWindow, Ui_TaskRigMainWindow):
         super(MainWindow, self).__init__()
         self.setupUi(self)
 
-    @pyqtSlot(bool)
+    @pyqtSlot(bool, name='on_start_trigger_clicked')
     def on_start_trigger_clicked(self, is_checked: bool):
         if is_checked:
             self.start_exp.emit()
         else:
             self.stop_exp.emit()
 
-    @pyqtSlot(dict)
+    @pyqtSlot(dict, name='on_update_result')
     def on_update_result(self, new_state: dict):
         self.raw_result.setText("{0:2d}/{1:2d}/{2:2d}".format(
             new_state["hit"], new_state["miss"], new_state["early"]))
@@ -35,17 +35,17 @@ class MainWindow(QMainWindow, Ui_TaskRigMainWindow):
             new_state["hit"] / (new_state["hit"] + new_state["miss"] + new_state["early"]) * 100)))
         self.water_given.setText("{0:.2f}".format(new_state["water_given"]))
 
-    @pyqtSlot()
+    @pyqtSlot(name='on_exp_finished')
     def on_exp_finished(self):
         self.status_bar.showMessage('exp finished')
         self.start_trigger.isChecked(False)
 
     # button events
-    @pyqtSlot()
+    @pyqtSlot(name='on_water_button_clicked')
     def on_water_button_clicked(self):
         self.give_water.emit()
 
-    @pyqtSlot(bool)
+    @pyqtSlot(bool, name='on_water_start_clicked')
     def on_water_start_clicked(self, is_checked: bool):
         if is_checked:
             self.water_button.setEnabled(False)
@@ -54,7 +54,7 @@ class MainWindow(QMainWindow, Ui_TaskRigMainWindow):
             self.stop_water.emit()
             self.water_button.setEnabled(True)
 
-    @pyqtSlot(QCloseEvent)
+    @pyqtSlot(QCloseEvent, name='closeEvent')
     def closeEvent(self, x: QCloseEvent):
         if self.controller:
             self.controller.on_stop()

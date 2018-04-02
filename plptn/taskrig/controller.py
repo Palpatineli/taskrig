@@ -13,6 +13,7 @@ class MyState(QState):
         self.timer = QTimer(self)
         self.timer.setInterval(msec)
         self.timer.setSingleShot(True)
+        # noinspection PyUnresolvedReferences
         self.entered.connect(self.timer.start)
 
     def addTimedTransition(self, target: QState):
@@ -55,19 +56,19 @@ class Controller(QObject):
             machine.addState(value)
         machine.setInitialState(states['inter_trial'])
 
-    @pyqtSlot()
+    @pyqtSlot(name='on_start')
     def on_start(self):
         self.logger.clear()
         self.machine.start()
         self.start.emit()
 
-    @pyqtSlot()
+    @pyqtSlot(name='on_stop')
     def on_stop(self):
         self.stop.emit()
         self.machine.stop()
         self.logger.save(self.setting['file_path'])
         self.finished.emit()
 
-    @pyqtSlot(str)
+    @pyqtSlot(str, name='on_update_state')
     def on_update_state(self, msg: str):
         self.update_state.emit(msg)

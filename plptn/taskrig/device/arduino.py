@@ -9,7 +9,9 @@ from serial.tools.list_ports import comports
 from serial.tools.list_ports_common import ListPortInfo
 
 from plptn.taskrig.config import DeviceConfig
-from plptn.taskrig.device.protocol import *
+from plptn.taskrig.device.protocol import (
+    SignalType, OTHER_SIGNALS, SIGNAL_NAME, BAUDRATE, SEPARATOR, SERIAL_SEGMENT, PACKET_FMT,
+    PACKET_FMT_S, SEND_PACKET_FMT)
 from plptn.taskrig.device.sys_audio import SysAudio
 from plptn.taskrig.util.logger import Logger
 from plptn.taskrig.util.timeseries import despike
@@ -41,7 +43,8 @@ def _read_packets(port: Serial) -> Iterable[Tuple]:
                  PACKET_FMT.iter_unpack(port.read(to_read)))
 
 
-class Arduino(QObject):
+class Arduino(QObject):  # pylint:disable=R0902
+    """Define low-level interactions witht the arduino"""
     lever_pushed = pyqtSignal(name="lever_pushed")
     lever_fluxed = pyqtSignal(name="lever_fluxed")
     send_message = pyqtSignal(str, name="send_message")
@@ -50,7 +53,7 @@ class Arduino(QObject):
     timer = None
     audio_device = None  # type: SysAudio
 
-    def __init__(self, device_id: str, port: ListPortInfo, logger: Logger):
+    def __init__(self, device_id: str, port: ListPortInfo, logger: Logger) -> None:
         super(Arduino, self).__init__()
         self.logger = logger
         device_cfg = DeviceConfig(device_id)
@@ -62,15 +65,16 @@ class Arduino(QObject):
         self._water_convert = RewardControl(*device_cfg['reward']['time_coef'])
         self.waiting_for_ttl = False
 
-    @pyqtSlot()
+    @pyqtSlot(name='on_start')
     def on_start(self):
         self.audio_device = SysAudio()  # has a timer in it, needs to be created in thread
         self.timer = QTimer()
+        # noinspection PyUnresolvedReferences
         self.timer.timeout.connect(self.work_once)
         self.port.reset_input_buffer()
         self.timer.start(25)
 
-    @pyqtSlot()
+    @pyqtSlot(name='work_once')
     def work_once(self):
         port = self.port
         logger = self.logger
@@ -83,7 +87,7 @@ class Arduino(QObject):
                 lever_stamp = timestamps[lever_mask]
                 logger.lever_stamp.append(lever_stamp)
                 logger.lever_signal.append(lever_signal)
-                result, lever_event_stamp = self.lever_processor(lever_signal, lever_stamp)
+                result, _ = self.lever_processor(lever_signal, lever_stamp)
                 if result == LEVER_FLUX:
                     self.lever_fluxed.emit()
                 elif result == LEVER_RISE:
@@ -105,46 +109,43 @@ class Arduino(QObject):
                 if np.count_nonzero(mask) > 0:
                     logger.other.append((SIGNAL_NAME[signal_type], int(timestamps[mask][0])))
 
-    @pyqtSlot()
+    @pyqtSlot(name='on_stop')
     def on_stop(self):
         if self.timer is not None:
             self.timer.stop()
         self.finished.emit()
 
-    @pyqtSlot(float)
+    @pyqtSlot(float, name='on_give_water')
     def on_give_water(self, amount: float):
         self.port.write(SEPARATOR + SEND_PACKET_FMT.pack(SignalType.WATER_START,
                                                          self._water_convert(amount)))
 
-    @pyqtSlot()
+    @pyqtSlot(name='on_start_water')
     def on_start_water(self):
         sent_bytes = SEPARATOR + SEND_PACKET_FMT.pack(SignalType.WATER_START, 0)
         self.port.write(sent_bytes)
 
-    @pyqtSlot()
+    @pyqtSlot(name='on_reset')
     def on_reset(self):
         self.port.reset_input_buffer()
 
-    @pyqtSlot()
+    @pyqtSlot(name='on_stop_water')
     def on_stop_water(self):
         self.port.write(SEPARATOR + SEND_PACKET_FMT.pack(SignalType.WATER_END, 0))
 
-    @pyqtSlot(int)
+    @pyqtSlot(int, name='on_play_sound')
     def on_play_sound(self, sound_id: str):
-        logger = self.logger
-        logger.sound_played.append(sound_id)
-        logger.sound_stamp.append(logger.lever_stamp[-1][-1])
         self.audio_device.play(sound_id)
 
-    @pyqtSlot()
+    @pyqtSlot(name='on_give_ttl')
     def on_give_ttl(self):
         self.port.write(SEPARATOR + SEND_PACKET_FMT.pack(SignalType.SEND_TTL, 0))
         self.waiting_for_ttl = True
 
 
-class RewardControl(object):
+class RewardControl(object):  # pylint:disable=R0903
     """convert ml to ms with the reward delivery system in current rig"""
-    def __init__(self, linear_coef: float, startup_time: float):
+    def __init__(self, linear_coef: float, startup_time: float) -> None:
         self.linear_coef = linear_coef
         self.startup_time = startup_time
 
@@ -152,11 +153,11 @@ class RewardControl(object):
         return int(self.linear_coef * volume + self.startup_time)
 
 
-class LeverProcessor(object):
+class LeverProcessor(object):  # pylint:disable=R0903
     previous = 0
     baseline = 0
 
-    def __init__(self, lever_config):
+    def __init__(self, lever_config) -> None:
         super(LeverProcessor, self).__init__()
         self.min_rise = lever_config['min_rise']
         self.max_flux = lever_config['max_flux']
@@ -175,12 +176,11 @@ class LeverProcessor(object):
         return return_value, timestamps[max_idx]
 
 
-class LickProcessor(object):
+class LickProcessor(object):  # pylint:disable=R0903
     def __init__(self, lick_config):
         self.lick_threshold = lick_config['threshold']
 
     def __call__(self, trace):
         if np.diff(trace).max() > self.lick_threshold:
             return LICKED
-        else:
-            return 0
+        return 0

@@ -12,6 +12,7 @@ SOUND_ID = ('start', 'reward', 'punish')
 
 
 def _audio_callback(in_file, in_data, frame_count, time_info, status):
+    del in_data, time_info, status
     return in_file.readframes(frame_count), paContinue
 
 
@@ -31,6 +32,7 @@ class SysAudio(QObject):
         self.audio = PyAudio()
         self.timer = QTimer()
         self.timer.setInterval(200)
+        # noinspection PyUnresolvedReferences
         self.timer.timeout.connect(self.cleanup)
         self.is_playing = False
 

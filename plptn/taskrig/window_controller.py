@@ -42,14 +42,14 @@ class WindowController(QObject):
         ui.file_path.textChanged.connect(self.set_file_path)
         ui.browse.released.connect(self.browse_file_path)
 
-    @pyqtSlot()
+    @pyqtSlot(name='browser_file_path')
     def browse_file_path(self):
         file_name, _ = QFileDialog.getSaveFileName(
             self.ui, "Save Log File as...", path.dirname(self.setting['file_path']),
             "Config File (*.json)", options=QFileDialog.Options())
         self.ui.file_path.setText(file_name)
 
-    @pyqtSlot(str)
+    @pyqtSlot(str, name='set_file_path')
     def set_file_path(self, value: str):
         self.setting['file_path'] = value
 
